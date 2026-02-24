@@ -1,51 +1,46 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { neon } from '@neondatabase/serverless';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'hoesik.db');
+export function getSQL() {
+  return neon(process.env.DATABASE_URL!);
+}
 
-let db: Database.Database | null = null;
+let initialized = false;
 
-export function getDb(): Database.Database {
-  if (!db) {
-    const fs = require('fs');
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+export async function initDb() {
+  if (initialized) return;
 
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+  const sql = getSQL();
 
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS gatherings (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        date TEXT NOT NULL,
-        location TEXT NOT NULL,
-        maxParticipants INTEGER NOT NULL,
-        deadline TEXT,
-        status TEXT DEFAULT 'active',
-        createdAt TEXT DEFAULT (datetime('now'))
-      );
+  await sql`
+    CREATE TABLE IF NOT EXISTS gatherings (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      location TEXT NOT NULL,
+      "maxParticipants" INTEGER NOT NULL,
+      deadline TEXT,
+      status TEXT DEFAULT 'active',
+      "createdAt" TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    )
+  `;
 
-      CREATE TABLE IF NOT EXISTS ratings (
-        id TEXT PRIMARY KEY,
-        gatheringId TEXT NOT NULL,
-        nickname TEXT NOT NULL,
-        foodRating INTEGER,
-        locationRating INTEGER,
-        atmosphereRating INTEGER,
-        membersRating INTEGER,
-        endTimeRating INTEGER,
-        comment TEXT,
-        isComplete INTEGER DEFAULT 0,
-        createdAt TEXT DEFAULT (datetime('now')),
-        FOREIGN KEY (gatheringId) REFERENCES gatherings(id)
-      );
-    `);
-  }
-  return db;
+  await sql`
+    CREATE TABLE IF NOT EXISTS ratings (
+      id TEXT PRIMARY KEY,
+      "gatheringId" TEXT NOT NULL REFERENCES gatherings(id),
+      nickname TEXT NOT NULL,
+      "foodRating" INTEGER,
+      "locationRating" INTEGER,
+      "atmosphereRating" INTEGER,
+      "membersRating" INTEGER,
+      "endTimeRating" INTEGER,
+      comment TEXT,
+      "isComplete" INTEGER DEFAULT 0,
+      "createdAt" TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    )
+  `;
+
+  initialized = true;
 }
 
 export interface Gathering {

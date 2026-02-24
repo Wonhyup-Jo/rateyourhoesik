@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb, Gathering } from '@/lib/db';
+import { initDb, getSQL, Gathering } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(
@@ -7,10 +7,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await initDb();
+    const sql = getSQL();
     const { id } = await params;
-    const db = getDb();
 
-    const gathering = db.prepare('SELECT * FROM gatherings WHERE id = ?').get(id) as Gathering | undefined;
+    const rows = await sql`SELECT * FROM gatherings WHERE id = ${id}`;
+    const gathering = rows[0] as Gathering | undefined;
 
     if (!gathering) {
       return NextResponse.json({ error: '평가를 찾을 수 없습니다.' }, { status: 404 });
@@ -21,19 +23,20 @@ export async function POST(
       const now = new Date();
       const deadline = new Date(gathering.deadline);
       if (now > deadline) {
-        db.prepare('UPDATE gatherings SET status = ? WHERE id = ?').run('closed', id);
+        await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
         return NextResponse.json({ error: '평가 기한이 종료되었습니다.' }, { status: 400 });
       }
     }
 
     // Check participant count
-    const completeCount = db.prepare(
-      'SELECT COUNT(*) as count FROM ratings WHERE gatheringId = ? AND isComplete = 1'
-    ).get(id) as { count: number };
+    const countResult = await sql`
+      SELECT COUNT(*) as count FROM ratings WHERE "gatheringId" = ${id} AND "isComplete" = 1
+    `;
+    const completeCount = Number(countResult[0].count);
 
-    if (gathering.status === 'closed' || completeCount.count >= gathering.maxParticipants) {
+    if (gathering.status === 'closed' || completeCount >= gathering.maxParticipants) {
       if (gathering.status !== 'closed') {
-        db.prepare('UPDATE gatherings SET status = ? WHERE id = ?').run('closed', id);
+        await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
       }
       return NextResponse.json({ error: '평가가 이미 종료되었습니다.' }, { status: 400 });
     }
@@ -52,21 +55,16 @@ export async function POST(
     const isComplete = allRatingsProvided ? 1 : 0;
 
     const ratingId = uuidv4().slice(0, 8);
-    db.prepare(`
-      INSERT INTO ratings (id, gatheringId, nickname, foodRating, locationRating, atmosphereRating, membersRating, endTimeRating, comment, isComplete)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      ratingId, id, nickname,
-      foodRating || null, locationRating || null, atmosphereRating || null,
-      membersRating || null, endTimeRating || null,
-      comment || null, isComplete
-    );
+    await sql`
+      INSERT INTO ratings (id, "gatheringId", nickname, "foodRating", "locationRating", "atmosphereRating", "membersRating", "endTimeRating", comment, "isComplete")
+      VALUES (${ratingId}, ${id}, ${nickname}, ${foodRating || null}, ${locationRating || null}, ${atmosphereRating || null}, ${membersRating || null}, ${endTimeRating || null}, ${comment || null}, ${isComplete})
+    `;
 
     // Auto-close if participant count reached
     if (isComplete) {
-      const newCount = completeCount.count + 1;
+      const newCount = completeCount + 1;
       if (newCount >= gathering.maxParticipants) {
-        db.prepare('UPDATE gatherings SET status = ? WHERE id = ?').run('closed', id);
+        await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
       }
     }
 

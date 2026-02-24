@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { initDb, getSQL } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(request: Request) {
   try {
+    await initDb();
+    const sql = getSQL();
     const body = await request.json();
     const { title, date, location, maxParticipants, deadline } = body;
 
@@ -14,13 +16,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const db = getDb();
     const id = uuidv4().slice(0, 8);
 
-    db.prepare(`
-      INSERT INTO gatherings (id, title, date, location, maxParticipants, deadline)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, title, date, location, maxParticipants, deadline || null);
+    await sql`
+      INSERT INTO gatherings (id, title, date, location, "maxParticipants", deadline)
+      VALUES (${id}, ${title}, ${date}, ${location}, ${maxParticipants}, ${deadline || null})
+    `;
 
     return NextResponse.json({ id }, { status: 201 });
   } catch (error) {

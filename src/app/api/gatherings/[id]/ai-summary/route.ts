@@ -1,23 +1,25 @@
 import { NextResponse } from 'next/server';
-import { getDb, Gathering, Rating } from '@/lib/db';
+import { initDb, getSQL, Gathering } from '@/lib/db';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await initDb();
+    const sql = getSQL();
     const { id } = await params;
-    const db = getDb();
 
-    const gathering = db.prepare('SELECT * FROM gatherings WHERE id = ?').get(id) as Gathering | undefined;
+    const rows = await sql`SELECT * FROM gatherings WHERE id = ${id}`;
+    const gathering = rows[0] as Gathering | undefined;
 
     if (!gathering) {
       return NextResponse.json({ error: '평가를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const ratings = db.prepare(
-      'SELECT comment FROM ratings WHERE gatheringId = ? AND isComplete = 1 AND comment IS NOT NULL AND comment != ?'
-    ).all(id, '') as Array<{ comment: string }>;
+    const ratings = await sql`
+      SELECT comment FROM ratings WHERE "gatheringId" = ${id} AND "isComplete" = 1 AND comment IS NOT NULL AND comment != ''
+    ` as Array<{ comment: string }>;
 
     if (ratings.length === 0) {
       return NextResponse.json({
@@ -29,7 +31,6 @@ export async function GET(
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      // Fallback: simple summary without AI
       return NextResponse.json({
         summary: `총 ${comments.length}개의 코멘트가 접수되었습니다. AI 분석을 위해 API 키를 설정해주세요.`,
       });

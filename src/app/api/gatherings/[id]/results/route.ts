@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
-import { getDb, Gathering, CATEGORIES } from '@/lib/db';
+import { initDb, getSQL, Gathering, CATEGORIES } from '@/lib/db';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await initDb();
+    const sql = getSQL();
     const { id } = await params;
-    const db = getDb();
 
-    const gathering = db.prepare('SELECT * FROM gatherings WHERE id = ?').get(id) as Gathering | undefined;
+    const rows = await sql`SELECT * FROM gatherings WHERE id = ${id}`;
+    const gathering = rows[0] as Gathering | undefined;
 
     if (!gathering) {
       return NextResponse.json({ error: '평가를 찾을 수 없습니다.' }, { status: 404 });
@@ -20,14 +22,14 @@ export async function GET(
       const now = new Date();
       const deadline = new Date(gathering.deadline);
       if (now > deadline) {
-        db.prepare('UPDATE gatherings SET status = ? WHERE id = ?').run('closed', id);
+        await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
         gathering.status = 'closed';
       }
     }
 
-    const completeRatings = db.prepare(
-      'SELECT * FROM ratings WHERE gatheringId = ? AND isComplete = 1'
-    ).all(id) as Array<Record<string, number | string | null>>;
+    const completeRatings = await sql`
+      SELECT * FROM ratings WHERE "gatheringId" = ${id} AND "isComplete" = 1
+    ` as Array<Record<string, number | string | null>>;
 
     const totalComplete = completeRatings.length;
 
@@ -51,7 +53,7 @@ export async function GET(
 
     // Check if max participants reached
     if (gathering.status === 'active' && totalComplete >= gathering.maxParticipants) {
-      db.prepare('UPDATE gatherings SET status = ? WHERE id = ?').run('closed', id);
+      await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
       gathering.status = 'closed';
     }
 
