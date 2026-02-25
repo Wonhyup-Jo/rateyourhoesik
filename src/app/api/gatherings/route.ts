@@ -1,6 +1,34 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { initDb, getSQL } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
+
+export async function GET(request: NextRequest) {
+  try {
+    await initDb();
+    const sql = getSQL();
+    const query = request.nextUrl.searchParams.get('q') || '';
+
+    const gatherings = query
+      ? await sql`
+          SELECT id, title, date, location, status
+          FROM gatherings
+          WHERE LOWER(title) LIKE ${'%' + query.toLowerCase() + '%'}
+          ORDER BY "createdAt" DESC
+          LIMIT 10
+        `
+      : await sql`
+          SELECT id, title, date, location, status
+          FROM gatherings
+          ORDER BY "createdAt" DESC
+          LIMIT 10
+        `;
+
+    return NextResponse.json(gatherings);
+  } catch (error) {
+    console.error('Error searching gatherings:', error);
+    return NextResponse.json([], { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {

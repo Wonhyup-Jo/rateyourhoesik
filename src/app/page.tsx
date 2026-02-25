@@ -1,36 +1,63 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+interface GatheringResult {
+  id: string;
+  title: string;
+  date: string;
+  location: string;
+  status: string;
+}
+
 export default function Home() {
   const router = useRouter();
-  const [linkInput, setLinkInput] = useState('');
-  const [error, setError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [results, setResults] = useState<GatheringResult[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const handleGoToLink = () => {
-    setError('');
-    const trimmed = linkInput.trim();
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowResults(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    // Extract ID from various formats
-    let id = '';
-    if (trimmed.includes('/rate/') || trimmed.includes('/results/')) {
-      const match = trimmed.match(/\/(rate|results)\/([a-zA-Z0-9-]+)/);
-      if (match) {
-        id = match[2];
-        router.push(`/${match[1]}/${id}`);
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const trimmed = searchInput.trim();
+      if (trimmed.length === 0) {
+        setResults([]);
+        setShowResults(false);
         return;
       }
-    }
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/gatherings?q=${encodeURIComponent(trimmed)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setResults(data);
+          setShowResults(true);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-    // Try as raw ID
-    if (/^[a-zA-Z0-9-]+$/.test(trimmed) && trimmed.length > 0) {
-      router.push(`/rate/${trimmed}`);
-      return;
-    }
-
-    setError('올바른 링크 또는 평가 ID를 입력해주세요.');
+  const handleSelect = (id: string) => {
+    setShowResults(false);
+    router.push(`/created/${id}`);
   };
 
   return (
@@ -60,28 +87,50 @@ export default function Home() {
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 
-      {/* Go to existing */}
-      <div className="w-full space-y-3">
+      {/* Search by title */}
+      <div className="w-full space-y-3" ref={wrapperRef}>
         <label className="text-sm font-medium text-gray-700">
-          평가 링크 또는 ID 입력
+          평가현황/결과 찾기
         </label>
-        <div className="flex gap-2">
+        <div className="relative">
           <input
             type="text"
-            value={linkInput}
-            onChange={(e) => setLinkInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleGoToLink()}
-            placeholder="링크 또는 ID를 붙여넣기"
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowResults(true); }}
+            placeholder="회식 제목으로 검색"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
           />
-          <button
-            onClick={handleGoToLink}
-            className="px-5 py-3 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
-          >
-            이동
-          </button>
+          {searching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="animate-spin w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full" />
+            </div>
+          )}
+
+          {/* Search Results Dropdown */}
+          {showResults && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+              {results.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-gray-400 text-center">
+                  검색 결과가 없습니다
+                </div>
+              ) : (
+                results.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => handleSelect(g.id)}
+                    className="w-full px-4 py-3 text-left hover:bg-amber-50 transition-colors border-b border-gray-50 last:border-b-0"
+                  >
+                    <div className="text-sm font-medium text-gray-900">{g.title}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {g.location} &middot; {new Date(g.date).toLocaleDateString('ko-KR')}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
-        {error && <p className="text-red-500 text-xs">{error}</p>}
       </div>
 
       {/* How it works */}
