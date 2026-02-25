@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function CreatePage() {
@@ -13,6 +13,9 @@ export default function CreatePage() {
     maxParticipants: '',
     deadline: '',
   });
+  const [openPicker, setOpenPicker] = useState<'date' | 'deadline' | null>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const deadlineRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +47,32 @@ export default function CreatePage() {
     }
   };
 
+  const handlePickerOpen = (field: 'date' | 'deadline') => {
+    setOpenPicker(field);
+    const ref = field === 'date' ? dateRef : deadlineRef;
+    // Try to programmatically open the picker
+    ref.current?.showPicker?.();
+    ref.current?.focus();
+  };
+
+  const handleConfirm = (field: 'date' | 'deadline') => {
+    setOpenPicker(null);
+    // Blur the input to close any native picker
+    const ref = field === 'date' ? dateRef : deadlineRef;
+    ref.current?.blur();
+  };
+
+  const formatDateTime = (value: string) => {
+    if (!value) return '';
+    return new Date(value).toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,13 +101,35 @@ export default function CreatePage() {
           <label className="text-sm font-medium text-gray-700">
             회식 날짜/시간 <span className="text-red-400">*</span>
           </label>
-          <input
-            type="datetime-local"
-            required
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-          />
+          {openPicker === 'date' ? (
+            <div className="space-y-2">
+              <input
+                ref={dateRef}
+                type="datetime-local"
+                required
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-amber-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={() => handleConfirm('date')}
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                확인
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handlePickerOpen('date')}
+              className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-left focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent ${
+                form.date ? 'text-gray-900' : 'text-gray-400'
+              }`}
+            >
+              {form.date ? formatDateTime(form.date) : '날짜/시간을 선택하세요'}
+            </button>
+          )}
         </div>
 
         {/* Location */}
@@ -119,12 +170,34 @@ export default function CreatePage() {
           <label className="text-sm font-medium text-gray-700">
             평가 기한 <span className="text-gray-400 text-xs font-normal">(선택)</span>
           </label>
-          <input
-            type="datetime-local"
-            value={form.deadline}
-            onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-          />
+          {openPicker === 'deadline' ? (
+            <div className="space-y-2">
+              <input
+                ref={deadlineRef}
+                type="datetime-local"
+                value={form.deadline}
+                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-amber-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={() => handleConfirm('deadline')}
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                확인
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handlePickerOpen('deadline')}
+              className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-left focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent ${
+                form.deadline ? 'text-gray-900' : 'text-gray-400'
+              }`}
+            >
+              {form.deadline ? formatDateTime(form.deadline) : '기한을 선택하세요 (선택사항)'}
+            </button>
+          )}
           <p className="text-xs text-gray-400">기한이 지나면 자동으로 평가가 종료됩니다</p>
         </div>
 
