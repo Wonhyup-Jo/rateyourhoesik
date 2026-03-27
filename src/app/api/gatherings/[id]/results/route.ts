@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { initDb, getSQL, Gathering, CATEGORIES } from '@/lib/db';
+import { initDb, getSQL, Gathering, CATEGORIES, checkAndCloseGathering } from '@/lib/db';
 
 export async function GET(
   request: Request,
@@ -17,15 +17,8 @@ export async function GET(
       return NextResponse.json({ error: '평가를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    // Check deadline and auto-close
-    if (gathering.status === 'active' && gathering.deadline) {
-      const now = new Date();
-      const deadline = new Date(gathering.deadline);
-      if (now > deadline) {
-        await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${id}`;
-        gathering.status = 'closed';
-      }
-    }
+    // Check deadline and auto-close (shared logic)
+    await checkAndCloseGathering(sql, gathering);
 
     const completeRatings = await sql`
       SELECT * FROM ratings WHERE "gatheringId" = ${id} AND "isComplete" = 1

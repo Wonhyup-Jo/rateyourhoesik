@@ -77,3 +77,21 @@ export const CATEGORIES = [
 ] as const;
 
 export type CategoryKey = typeof CATEGORIES[number]['key'];
+
+/**
+ * Check if a gathering should be auto-closed (deadline passed) and update in-place.
+ * Shared logic to avoid DRY violation across API routes.
+ */
+export async function checkAndCloseGathering(
+  sql: ReturnType<typeof getSQL>,
+  gathering: Gathering
+): Promise<void> {
+  if (gathering.status === 'active' && gathering.deadline) {
+    const now = new Date();
+    const deadline = new Date(gathering.deadline);
+    if (now > deadline) {
+      await sql`UPDATE gatherings SET status = 'closed' WHERE id = ${gathering.id}`;
+      gathering.status = 'closed';
+    }
+  }
+}
