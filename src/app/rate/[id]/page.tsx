@@ -4,14 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import StarRating from '@/components/StarRating';
-
-const CATEGORIES = [
-  { key: 'foodRating', label: '음식', emoji: '🍽️', desc: '음식의 맛과 질' },
-  { key: 'locationRating', label: '장소', emoji: '📍', desc: '장소의 접근성과 환경' },
-  { key: 'atmosphereRating', label: '분위기', emoji: '✨', desc: '전반적인 회식 분위기' },
-  { key: 'membersRating', label: '멤버', emoji: '👥', desc: '함께한 사람들과의 시간' },
-  { key: 'endTimeRating', label: '종료시간', emoji: '⏰', desc: '적절한 마무리 시간' },
-];
+import { CATEGORIES } from '@/lib/db';
 
 interface GatheringData {
   id: string;
