@@ -18,12 +18,16 @@ export default function CreatedPage() {
   const id = params.id as string;
   const [gathering, setGathering] = useState<GatheringData | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch(`/api/gatherings/${id}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('not found');
+        return res.json();
+      })
       .then(data => setGathering(data))
-      .catch(() => {});
+      .catch(() => setError(true));
   }, [id]);
 
   const getBaseUrl = () => {
@@ -53,6 +57,15 @@ export default function CreatedPage() {
       setTimeout(() => setCopied(null), 2000);
     }
   };
+
+  if (error) {
+    return (
+      <div className="text-center py-20 space-y-4">
+        <p className="text-gray-500">평가를 찾을 수 없습니다</p>
+        <Link href="/" className="text-amber-500 underline text-sm">홈으로 돌아가기</Link>
+      </div>
+    );
+  }
 
   if (!gathering) {
     return (

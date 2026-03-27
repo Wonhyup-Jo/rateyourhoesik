@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initDb, getSQL, Gathering } from '@/lib/db';
 
-// In-memory cache: gatheringId -> { summary, commentCount, timestamp }
-const summaryCache = new Map<string, { summary: string; commentCount: number; cachedAt: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-// Simple rate limiter: IP -> last request timestamp
-const rateLimitMap = new Map<string, number>();
-const RATE_LIMIT_MS = 10_000; // 10 seconds between requests per gathering
-
 function sanitizeComment(comment: string): string {
   // Strip control characters and limit length to prevent prompt injection payloads
   return comment
@@ -25,24 +17,8 @@ export async function GET(
     const sql = getSQL();
     const { id } = await params;
 
-    // Rate limiting per gathering ID
-    const rateLimitKey = id;
-    const lastRequest = rateLimitMap.get(rateLimitKey);
-    const now = Date.now();
-    if (lastRequest && now - lastRequest < RATE_LIMIT_MS) {
-      const cached = summaryCache.get(id);
-      if (cached) {
-        return NextResponse.json({ summary: cached.summary });
-      }
-      return NextResponse.json(
-        { error: '요청이 너무 빈번합니다. 잠시 후 다시 시도해주세요.' },
-        { status: 429 }
-      );
-    }
-    rateLimitMap.set(rateLimitKey, now);
-
-    const rows = await sql`SELECT id, title, location FROM gatherings WHERE id = ${id}`;
-    const gathering = rows[0] as Gathering | undefined;
+    const rows = await sql`SELECT id, title, location, "aiSummary", "aiSummaryCount" FROM gatherings WHERE id = ${id}`;
+    const gathering = rows[0] as (Gathering & { aiSummary: string | null; aiSummaryCount: number }) | undefined;
 
     if (!gathering) {
       return NextResponse.json({ error: '평가를 찾을 수 없습니다.' }, { status: 404 });
@@ -60,10 +36,10 @@ export async function GET(
 
     const comments = ratings.map(r => r.comment);
 
-    // Check cache: return cached summary if comment count hasn't changed and TTL is valid
-    const cached = summaryCache.get(id);
-    if (cached && cached.commentCount === comments.length && (now - cached.cachedAt) < CACHE_TTL_MS) {
-      return NextResponse.json({ summary: cached.summary });
+    // DB-level cache: return cached summary if comment count hasn't changed
+    // This works across serverless instances (unlike in-memory Map)
+    if (gathering.aiSummary && gathering.aiSummaryCount === comments.length) {
+      return NextResponse.json({ summary: gathering.aiSummary });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -117,8 +93,10 @@ export async function GET(
     const data = await response.json();
     const summary = data.content?.[0]?.text || '분석 결과를 가져올 수 없습니다.';
 
-    // Cache the result
-    summaryCache.set(id, { summary, commentCount: comments.length, cachedAt: Date.now() });
+    // Persist summary to DB for cross-instance cache (serverless-safe)
+    await sql`
+      UPDATE gatherings SET "aiSummary" = ${summary}, "aiSummaryCount" = ${comments.length} WHERE id = ${id}
+    `;
 
     return NextResponse.json({ summary });
   } catch (error) {

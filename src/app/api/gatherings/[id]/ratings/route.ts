@@ -51,6 +51,14 @@ export async function POST(
       return NextResponse.json({ error: '닉네임은 20자 이내로 입력해주세요.' }, { status: 400 });
     }
 
+    // Prevent duplicate submissions (same nickname per gathering)
+    const existingRating = await sql`
+      SELECT id FROM ratings WHERE "gatheringId" = ${id} AND LOWER(nickname) = LOWER(${nickname.trim()}) AND "isComplete" = 1
+    `;
+    if (existingRating.length > 0) {
+      return NextResponse.json({ error: '이미 평가를 제출하셨습니다.' }, { status: 400 });
+    }
+
     // Validate ratings — must be integers 1~5
     const ratingValues = [foodRating, locationRating, atmosphereRating, membersRating, endTimeRating];
     const allRatingsProvided = ratingValues.every(isValidRating);

@@ -4,14 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import StarRating from '@/components/StarRating';
-
-const CATEGORIES = [
-  { key: 'foodRating', label: '음식', emoji: '🍽️' },
-  { key: 'locationRating', label: '장소', emoji: '📍' },
-  { key: 'atmosphereRating', label: '분위기', emoji: '✨' },
-  { key: 'membersRating', label: '멤버', emoji: '👥' },
-  { key: 'endTimeRating', label: '종료시간', emoji: '⏰' },
-];
+import { CATEGORIES } from '@/lib/db';
 
 interface ResultsData {
   gathering: {

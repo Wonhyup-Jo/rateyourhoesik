@@ -1,14 +1,23 @@
 import { neon } from '@neondatabase/serverless';
 
 export function getSQL() {
-  return neon(process.env.DATABASE_URL!);
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL 환경변수가 설정되지 않았습니다.');
+  }
+  return neon(process.env.DATABASE_URL);
 }
 
-let initialized = false;
+// Promise singleton pattern to prevent race condition on concurrent cold starts
+let initPromise: Promise<void> | null = null;
 
-export async function initDb() {
-  if (initialized) return;
+export function initDb() {
+  if (!initPromise) {
+    initPromise = doInit();
+  }
+  return initPromise;
+}
 
+async function doInit() {
   const sql = getSQL();
 
   await sql`
@@ -40,7 +49,17 @@ export async function initDb() {
     )
   `;
 
-  initialized = true;
+  // Index for fast lookup by gatheringId (prevents full table scan)
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_ratings_gathering_id ON ratings("gatheringId")
+  `;
+
+  // AI summary cache columns (serverless-safe, persists across instances)
+  await sql`
+    ALTER TABLE gatherings
+    ADD COLUMN IF NOT EXISTS "aiSummary" TEXT,
+    ADD COLUMN IF NOT EXISTS "aiSummaryCount" INTEGER DEFAULT 0
+  `;
 }
 
 export interface Gathering {
@@ -69,11 +88,11 @@ export interface Rating {
 }
 
 export const CATEGORIES = [
-  { key: 'foodRating', label: '음식', emoji: '🍽️' },
-  { key: 'locationRating', label: '장소', emoji: '📍' },
-  { key: 'atmosphereRating', label: '분위기', emoji: '✨' },
-  { key: 'membersRating', label: '멤버', emoji: '👥' },
-  { key: 'endTimeRating', label: '종료시간', emoji: '⏰' },
+  { key: 'foodRating', label: '음식', emoji: '🍽️', desc: '음식의 맛과 질' },
+  { key: 'locationRating', label: '장소', emoji: '📍', desc: '장소의 접근성과 환경' },
+  { key: 'atmosphereRating', label: '분위기', emoji: '✨', desc: '전반적인 회식 분위기' },
+  { key: 'membersRating', label: '멤버', emoji: '👥', desc: '함께한 사람들과의 시간' },
+  { key: 'endTimeRating', label: '종료시간', emoji: '⏰', desc: '적절한 마무리 시간' },
 ] as const;
 
 export type CategoryKey = typeof CATEGORIES[number]['key'];
